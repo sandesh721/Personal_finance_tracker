@@ -984,19 +984,19 @@ Added Vitest + Testing Library coverage for:
 
 Added:
 
-- `backend/Dockerfile`
-- `backend/.dockerignore`
-- `frontend/Dockerfile`
-- `frontend/.dockerignore`
+- `backend/Containerfile`
+- `backend/.containerignore`
+- `frontend/Containerfile`
+- `frontend/.containerignore`
 - `frontend/nginx.conf`
-- root `docker-compose.yml`
+- root `compose.yaml`
 
-Docker decisions:
+Podman/container decisions:
 
 - backend runs on ASP.NET Core runtime image
 - frontend builds with Node and serves static assets through Nginx
 - Nginx proxies `/api` and `/health` to the backend container
-- docker-compose includes PostgreSQL, backend, and frontend for local full-stack execution
+- Podman compose includes PostgreSQL, backend, and frontend for local full-stack execution
 - compose uses explicit environment variables and keeps migration execution separate/documented
 
 ### Validation Status
@@ -1013,7 +1013,7 @@ Verified for this phase:
 - exports are CSV-only in this phase; PDF is intentionally deferred
 - transaction export currently uses the existing transaction filters, which do not yet expose every possible report-style aggregation filter in the UI
 - request logging is structured and useful, but not yet integrated with an external log sink or correlation system
-- docker-compose does not auto-run database migrations; migration execution remains an explicit operational step
+- Podman compose does not auto-run database migrations; migration execution remains an explicit operational step
 
 ### Recommended Next Step
 
@@ -1023,3 +1023,138 @@ The strongest next cleanup or phase after this would be one of:
 - scheduler hosting for unattended recurring execution
 - richer report/export formats and analytics
 - CI pipeline wiring for automated build/test/migration checks
+
+
+## Phase 5 Follow-Up - Settings, Auth Recovery, Notifications, and Automation Visibility
+
+### Scope Delivered
+
+This follow-up pass extended the product after the export/deployment phase with operational UX and account-management polish:
+
+- full settings workspace with profile, security, preferences, notifications, and financial defaults
+- theme selection with `slate`, `warm`, and `dark` modes
+- forgot-password and reset-password flow with token persistence and SMTP-capable email sender abstraction
+- dedicated category management UI
+- dedicated notifications history page and improved reminder wording
+- recurring automation status visibility in the UI and API
+- Podman-first deployment notes and cleaner repo ignore coverage for generated files
+
+### Settings And Theme Work
+
+Settings additions now include:
+
+- profile editing
+- password change
+- logout-all-sessions action
+- notification preference toggles
+- financial default values for account, payment method, and budget threshold
+- theme persistence through user settings and frontend theme provider
+
+UX polish added on top of the original settings page:
+
+- left-side settings section navigation
+- focused single-section editing workspace
+- theme preview swatches instead of a plain theme dropdown
+- improved success/error status styling
+- dark-theme select/input cleanup and consistency pass
+
+### Forgot Password And Email Delivery
+
+Auth recovery now includes:
+
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- one-time password reset tokens stored hashed in the database
+- token expiry and single-use enforcement
+- refresh-session revocation after successful password reset
+
+Email delivery design:
+
+- password reset email sending is abstracted through `IPasswordResetEmailSender`
+- SMTP delivery is supported through `EmailOptions`
+- when email delivery is disabled in development, the reset link is returned for local testing
+- production responses remain generic and do not leak account existence
+
+### Notifications And Reminder UX
+
+Notifications now include:
+
+- dedicated notifications history page
+- unread-only filtering
+- mark-one and mark-all-read flows
+- topbar notification panel shortcut to full history
+- clearer reminder wording for:
+  - recurring reminders
+  - recurring execution failures
+  - goal target reminders
+  - goal completion notifications
+
+### Recurring Automation Visibility
+
+Background automation is no longer only a hosted service running silently.
+
+Added visibility includes:
+
+- `GET /api/automation/status`
+- current background-processing enabled state
+- polling interval display
+- last started time
+- last completed time
+- last success/failure state
+- last summary snapshot including created transactions and reminder counts
+
+This keeps the scheduler production-sensible while making failures and last-run state visible in the app.
+
+### Category Management UI
+
+The frontend gap around categories is now closed with:
+
+- dedicated categories page
+- create category
+- rename category
+- archive category
+- archived visibility toggle
+- clear separation between income and expense categories
+
+### Podman / Deployment Notes
+
+Deployment support was extended with:
+
+- root `compose.yaml`
+- backend and frontend `Containerfile`s
+- `.containerignore` files
+- explicit Podman runbook in `notes/podman-deployment.md`
+
+Operational rule retained:
+
+- EF Core migrations remain explicit/manual and are not auto-run by compose startup
+
+### Additional Validation And Tests
+
+Frontend coverage now also includes:
+
+- forgot-password page
+- settings page theme-preference flow
+- categories page create flow
+- notifications page read flow
+
+Validation completed during this follow-up work:
+
+- `dotnet build src/FinanceTracker.Api/FinanceTracker.Api.csproj -c Release`
+- `npm run build`
+- `npm test`
+
+### Known Remaining Gaps After This Follow-Up
+
+- backend controller-level coverage for email-enabled forgot-password and automation status still needs final validation in this environment
+- the long notes file should continue to be kept in sync as newer polish passes land
+- tracked generated artifacts already present in git history still need careful cleanup rather than blunt deletion
+
+### Recommended Next Step
+
+The best remaining cleanup sequence from here is:
+
+- finalize backend coverage for forgot-password email-enabled and automation status behavior
+- perform one last dark-theme consistency review across all pages
+- group and commit current work in safe logical chunks
+- then move to optional growth items such as PDF export, richer reporting visuals, account detail pages, or data import

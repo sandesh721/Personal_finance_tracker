@@ -2,8 +2,11 @@
 .nuget/
 frontend/node_modules/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
 backend/src/**/bin/
 backend/src/**/obj/
+backend/tests/**/bin/
+backend/tests/**/obj/
 backend/build.log
 backend/api-build.log
 *.user
