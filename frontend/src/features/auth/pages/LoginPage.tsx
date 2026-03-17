@@ -75,6 +75,9 @@ export function LoginPage() {
         <Field label="Password" error={errors.password?.message}>
           <input {...register("password")} type="password" autoComplete="current-password" placeholder="Enter your password" />
         </Field>
+        <div className="auth-inline-actions">
+          <Link to="/forgot-password">Forgot password?</Link>
+        </div>
         <Button type="submit" loading={isSubmitting}>Sign in</Button>
       </form>
     </AuthCard>

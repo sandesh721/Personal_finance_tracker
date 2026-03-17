@@ -1,4 +1,5 @@
-:root {
+:root,
+:root[data-theme="slate"] {
   --color-bg: #eeeeee;
   --color-surface: #f4f5f6;
   --color-surface-strong: #ffffff;
@@ -17,4 +18,36 @@
   --radius-md: 16px;
   --radius-sm: 10px;
   --font-sans: "Segoe UI", "Aptos", "Helvetica Neue", sans-serif;
+}
+
+:root[data-theme="warm"] {
+  --color-bg: #fff8f0;
+  --color-surface: #fcfaf7;
+  --color-surface-strong: #ffffff;
+  --color-border: #e7ddd4;
+  --color-border-strong: #8c5a3c;
+  --color-text: #1f1a17;
+  --color-text-muted: #6e625b;
+  --color-accent: #c08552;
+  --color-accent-strong: #4b2e2b;
+  --color-accent-soft: #f7e6d8;
+  --color-success: #8c5a3c;
+  --color-danger: #bb6a57;
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #0f151b;
+  --color-surface: #18212a;
+  --color-surface-strong: #1f2a35;
+  --color-border: #2c3844;
+  --color-border-strong: #455565;
+  --color-text: #edf3f7;
+  --color-text-muted: #9dacb8;
+  --color-accent: #5ccbd2;
+  --color-accent-strong: #7ce0e5;
+  --color-accent-soft: rgba(92, 203, 210, 0.14);
+  --color-success: #63c6a3;
+  --color-danger: #f08f86;
+  --shadow-soft: 0 28px 72px rgba(0, 0, 0, 0.42);
+  --shadow-card: 0 16px 36px rgba(0, 0, 0, 0.28);
 }

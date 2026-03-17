@@ -2,6 +2,7 @@ using FinanceTracker.Application.Auth.DTOs;
 using FinanceTracker.Application.Auth.Exceptions;
 using FinanceTracker.Application.Auth.Interfaces;
 using FinanceTracker.Application.Categories.Interfaces;
+using FinanceTracker.Application.Common;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -15,6 +16,8 @@ public sealed class AuthService(
     ITokenGenerator tokenGenerator,
     ICategorySeeder categorySeeder) : IAuthService
 {
+    private static readonly TimeSpan PasswordResetTokenLifetime = TimeSpan.FromHours(1);
+
     public async Task<AuthEnvelope> RegisterAsync(RegisterRequest request, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
@@ -128,6 +131,80 @@ public sealed class AuthService(
             .Where(x => x.Id == userId)
             .Select(x => new AuthenticatedUserDto(x.Id, x.Email, x.FirstName, x.LastName))
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<string?> RequestPasswordResetAsync(ForgotPasswordRequest request, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Email == normalizedEmail, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var activeTokens = await dbContext.PasswordResetTokens
+            .Where(x => x.UserId == user.Id && x.UsedUtc == null && x.ExpiresUtc > DateTime.UtcNow)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        foreach (var token in activeTokens)
+        {
+            token.UsedUtc = now;
+        }
+
+        var rawToken = tokenGenerator.CreateRefreshToken();
+        dbContext.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            UserId = user.Id,
+            TokenHash = tokenGenerator.HashRefreshToken(rawToken),
+            ExpiresUtc = now.Add(PasswordResetTokenLifetime),
+            RequestedIpAddress = ipAddress,
+            RequestedUserAgent = userAgent
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return rawToken;
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Email == normalizedEmail, cancellationToken)
+            ?? throw new ValidationException("Password reset link is invalid or expired.");
+
+        var tokenHash = tokenGenerator.HashRefreshToken(request.Token.Trim());
+        var resetToken = await dbContext.PasswordResetTokens
+            .SingleOrDefaultAsync(x => x.UserId == user.Id && x.TokenHash == tokenHash, cancellationToken)
+            ?? throw new ValidationException("Password reset link is invalid or expired.");
+
+        if (resetToken.UsedUtc is not null || resetToken.ExpiresUtc <= DateTime.UtcNow)
+        {
+            throw new ValidationException("Password reset link is invalid or expired.");
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(user, request.NewPassword);
+        resetToken.UsedUtc = DateTime.UtcNow;
+
+        var activeSessions = await dbContext.RefreshTokens
+            .Where(x => x.UserId == user.Id && x.RevokedUtc == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var session in activeSessions)
+        {
+            session.RevokedUtc = DateTime.UtcNow;
+            session.RevocationReason = "Password reset";
+        }
+
+        var remainingResetTokens = await dbContext.PasswordResetTokens
+            .Where(x => x.UserId == user.Id && x.Id != resetToken.Id && x.UsedUtc == null && x.ExpiresUtc > DateTime.UtcNow)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in remainingResetTokens)
+        {
+            token.UsedUtc = DateTime.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<AuthEnvelope> IssueSessionAsync(User user, string? ipAddress, string? userAgent, CancellationToken cancellationToken)

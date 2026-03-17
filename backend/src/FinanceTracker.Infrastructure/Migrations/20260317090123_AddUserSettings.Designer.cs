@@ -3,6 +3,7 @@ using System;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FinanceTracker.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260317090123_AddUserSettings")]
+    partial class AddUserSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -264,50 +267,6 @@ namespace FinanceTracker.Infrastructure.Migrations
                     b.HasIndex("UserId", "OccurredAtUtc");
 
                     b.ToTable("goal_entries", (string)null);
-                });
-
-            modelBuilder.Entity("FinanceTracker.Domain.Entities.PasswordResetToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RequestedIpAddress")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("RequestedUserAgent")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UsedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "ExpiresUtc");
-
-                    b.ToTable("password_reset_tokens", (string)null);
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransactionExecution", b =>
@@ -823,17 +782,6 @@ namespace FinanceTracker.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("FinanceTracker.Domain.Entities.PasswordResetToken", b =>
-                {
-                    b.HasOne("FinanceTracker.Domain.Entities.User", "User")
-                        .WithMany("PasswordResetTokens")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransactionExecution", b =>
                 {
                     b.HasOne("FinanceTracker.Domain.Entities.RecurringTransactionRule", "RecurringTransactionRule")
@@ -1019,8 +967,6 @@ namespace FinanceTracker.Infrastructure.Migrations
                     b.Navigation("Goals");
 
                     b.Navigation("Notifications");
-
-                    b.Navigation("PasswordResetTokens");
 
                     b.Navigation("RecurringTransactionRules");
 

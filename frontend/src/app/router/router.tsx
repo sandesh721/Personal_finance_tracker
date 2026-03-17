@@ -1,21 +1,27 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AccountsPage } from "../../features/accounts/pages/AccountsPage";
-import { LoginPage } from "../../features/auth/pages/LoginPage";
-import { SignupPage } from "../../features/auth/pages/SignupPage";
 import { AuthGuard } from "../../features/auth/components/AuthGuard";
+import { ForgotPasswordPage } from "../../features/auth/pages/ForgotPasswordPage";
+import { LoginPage } from "../../features/auth/pages/LoginPage";
+import { ResetPasswordPage } from "../../features/auth/pages/ResetPasswordPage";
+import { SignupPage } from "../../features/auth/pages/SignupPage";
 import { BudgetsPage } from "../../features/budgets/pages/BudgetsPage";
+import { CategoriesPage } from "../../features/categories/pages/CategoriesPage";
 import { DashboardPage } from "../../features/dashboard/pages/DashboardPage";
 import { GoalsPage } from "../../features/goals/pages/GoalsPage";
+import { NotificationsPage } from "../../features/notifications/pages/NotificationsPage";
 import { ReportsPage } from "../../features/reports/pages/ReportsPage";
 import { RecurringTransactionsPage } from "../../features/recurring/pages/RecurringTransactionsPage";
+import { SettingsPage } from "../../features/settings/pages/SettingsPage";
 import { TransactionsPage } from "../../features/transactions/pages/TransactionsPage";
 import { AppShell } from "../../layout/AppShell";
-import { PlaceholderPage } from "../../pages/PlaceholderPage";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/dashboard" replace /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/signup", element: <SignupPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     element: <AuthGuard />,
     children: [
@@ -25,11 +31,13 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: <DashboardPage /> },
           { path: "/transactions", element: <TransactionsPage /> },
           { path: "/accounts", element: <AccountsPage /> },
+          { path: "/categories", element: <CategoriesPage /> },
           { path: "/budgets", element: <BudgetsPage /> },
           { path: "/goals", element: <GoalsPage /> },
           { path: "/reports", element: <ReportsPage /> },
           { path: "/recurring", element: <RecurringTransactionsPage /> },
-          { path: "/settings", element: <PlaceholderPage title="Settings" description="Settings remains a placeholder while core finance modules are built out." /> },
+          { path: "/notifications", element: <NotificationsPage /> },
+          { path: "/settings", element: <SettingsPage /> },
         ],
       },
     ],

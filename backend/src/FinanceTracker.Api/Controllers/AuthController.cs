@@ -1,4 +1,5 @@
 using FluentValidation;
+using FinanceTracker.Api.Options;
 using FinanceTracker.Application.Auth.DTOs;
 using FinanceTracker.Application.Auth.Exceptions;
 using FinanceTracker.Application.Auth.Interfaces;
@@ -14,13 +15,20 @@ namespace FinanceTracker.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     IAuthService authService,
+    IPasswordResetEmailSender passwordResetEmailSender,
     IValidator<RegisterRequest> registerValidator,
     IValidator<LoginRequest> loginValidator,
+    IValidator<ForgotPasswordRequest> forgotPasswordValidator,
+    IValidator<ResetPasswordRequest> resetPasswordValidator,
     ICurrentUserService currentUserService,
     IOptions<JwtOptions> jwtOptions,
+    IOptions<FrontendOptions> frontendOptions,
+    IOptions<EmailOptions> emailOptions,
     IWebHostEnvironment environment) : ControllerBase
 {
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
+    private readonly FrontendOptions _frontendOptions = frontendOptions.Value;
+    private readonly EmailOptions _emailOptions = emailOptions.Value;
     private readonly IWebHostEnvironment _environment = environment;
 
     [HttpPost("register")]
@@ -69,6 +77,48 @@ public sealed class AuthController(
         {
             return Unauthorized(new ProblemDetails { Title = "Authentication failed.", Detail = "Invalid credentials.", Status = StatusCodes.Status401Unauthorized });
         }
+    }
+
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(typeof(ForgotPasswordResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var validationResult = await forgotPasswordValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BuildValidationProblem(validationResult);
+        }
+
+        var token = await authService.RequestPasswordResetAsync(request, GetIpAddress(), GetUserAgent(), cancellationToken);
+        var resetUrl = !string.IsNullOrWhiteSpace(token)
+            ? BuildResetUrl(request.Email, token)
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(resetUrl))
+        {
+            await passwordResetEmailSender.SendResetLinkAsync(request.Email.Trim(), resetUrl, cancellationToken);
+        }
+
+        return Accepted(new ForgotPasswordResponse(
+            "If the email exists, a password reset email has been prepared.",
+            _environment.IsDevelopment() && !_emailOptions.Enabled ? resetUrl : null));
+    }
+
+    [HttpPost("reset-password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var validationResult = await resetPasswordValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BuildValidationProblem(validationResult);
+        }
+
+        await authService.ResetPasswordAsync(request, cancellationToken);
+        ClearRefreshCookie();
+        return NoContent();
     }
 
     [HttpPost("refresh")]
@@ -127,6 +177,15 @@ public sealed class AuthController(
     private string? GetIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString();
 
     private string? GetUserAgent() => Request.Headers.UserAgent.ToString();
+
+    private string BuildResetUrl(string email, string token)
+    {
+        var frontendOrigin = _environment.IsDevelopment()
+            ? "http://localhost:5173"
+            : _frontendOptions.AllowedOrigins.FirstOrDefault(origin => Uri.TryCreate(origin, UriKind.Absolute, out _)) ?? "http://localhost:5173";
+
+        return $"{frontendOrigin.TrimEnd('/')}/reset-password?email={Uri.EscapeDataString(email.Trim())}&token={Uri.EscapeDataString(token)}";
+    }
 
     private void AppendRefreshCookie(string refreshToken, DateTime expiresUtc)
     {

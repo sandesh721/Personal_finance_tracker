@@ -9,6 +9,7 @@ using FinanceTracker.Application.Goals.Interfaces;
 using FinanceTracker.Application.Notifications.Interfaces;
 using FinanceTracker.Application.RecurringTransactions.Interfaces;
 using FinanceTracker.Application.Reports.Interfaces;
+using FinanceTracker.Application.Settings.Interfaces;
 using FinanceTracker.Application.Transactions.Interfaces;
 using FinanceTracker.Infrastructure.Auth;
 using FinanceTracker.Infrastructure.Automation;
@@ -16,6 +17,7 @@ using FinanceTracker.Infrastructure.Financial;
 using FinanceTracker.Infrastructure.Notifications;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Infrastructure.Reporting;
+using FinanceTracker.Infrastructure.Settings;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -35,6 +37,7 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenGenerator, TokenGenerator>();
+        services.AddScoped<IPasswordResetEmailSender, PasswordResetEmailSender>();
         services.AddScoped<IPasswordHasher<Domain.Entities.User>, PasswordHasher<Domain.Entities.User>>();
         services.AddScoped<ICategorySeeder, CategorySeeder>();
         services.AddScoped<IAccountService, AccountService>();
@@ -44,10 +47,12 @@ public static class DependencyInjection
         services.AddScoped<IGoalService, GoalService>();
         services.AddScoped<IRecurringTransactionService, RecurringTransactionService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddSingleton<IAutomationStatusTracker, AutomationStatusTracker>();
         services.AddScoped<IAutomationService, AutomationService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IExportService, ExportService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<ISettingsService, SettingsService>();
 
         return services;
     }

@@ -9,4 +9,6 @@ public interface IAuthService
     Task<AuthEnvelope> RefreshAsync(string refreshToken, string? ipAddress, string? userAgent, CancellationToken cancellationToken);
     Task RevokeAsync(string refreshToken, CancellationToken cancellationToken);
     Task<AuthenticatedUserDto?> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken);
+    Task<string?> RequestPasswordResetAsync(ForgotPasswordRequest request, string? ipAddress, string? userAgent, CancellationToken cancellationToken);
+    Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken);
 }

@@ -9,10 +9,12 @@ const navigationItems = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/transactions", label: "Transactions" },
   { to: "/accounts", label: "Accounts" },
+  { to: "/categories", label: "Categories" },
   { to: "/budgets", label: "Budgets" },
   { to: "/goals", label: "Goals" },
   { to: "/reports", label: "Reports" },
   { to: "/recurring", label: "Recurring" },
+  { to: "/notifications", label: "Notifications" },
   { to: "/settings", label: "Settings" },
 ];
 
@@ -178,6 +180,9 @@ export function AppShell() {
                     </div>
                     <button type="button" className="ghost-button ghost-button--small" onClick={() => void markAllNotificationsRead()} disabled={notificationFeed.unreadCount === 0}>Mark all read</button>
                   </div>
+                  <div className="notification-panel__actions">
+                    <button type="button" className="ghost-button ghost-button--small" onClick={() => { setIsNotificationsOpen(false); navigate("/notifications"); }}>View all</button>
+                  </div>
                   {notificationError ? <p className="notification-panel__state">{notificationError}</p> : null}
                   {loadingNotifications ? <p className="notification-panel__state">Loading notifications...</p> : null}
                   {!loadingNotifications && notificationFeed.items.length === 0 ? <p className="notification-panel__state">No notifications right now.</p> : null}
@@ -196,9 +201,9 @@ export function AppShell() {
                 </div>
               ) : null}
             </div>
-            <div className="user-badge user-badge--avatar-only" aria-label="Signed-in user initials">
+            <button type="button" className="user-badge user-badge--avatar-only user-badge-button" aria-label="Open settings" onClick={() => navigate("/settings") }>
               <span className="user-badge__avatar" aria-hidden="true">{initials}</span>
-            </div>
+            </button>
           </div>
         </header>
         <main className="content-panel"><Outlet /></main>
@@ -206,3 +211,7 @@ export function AppShell() {
     </div>
   );
 }
+
+
+
+

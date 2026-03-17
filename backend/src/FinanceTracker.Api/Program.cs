@@ -50,6 +50,14 @@ builder.Services
     .Validate(options => options.GoalReminderLookaheadDays is >= 1 and <= 30, "Goal reminder lookahead must be between 1 and 30 days.")
     .ValidateOnStart();
 
+builder.Services
+    .AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.FromAddress), "Email from address is required when email delivery is enabled.")
+    .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.SmtpHost), "SMTP host is required when email delivery is enabled.")
+    .Validate(options => !options.Enabled || options.Port > 0, "SMTP port must be greater than zero when email delivery is enabled.")
+    .ValidateOnStart();
+
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("JWT configuration is missing.");
 var frontendOptions = builder.Configuration.GetSection(FrontendOptions.SectionName).Get<FrontendOptions>() ?? new FrontendOptions();
@@ -109,7 +117,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
- builder.Services.AddHostedService<FinanceAutomationHostedService>();
+builder.Services.AddHostedService<FinanceAutomationHostedService>();
 
 var app = builder.Build();
 
