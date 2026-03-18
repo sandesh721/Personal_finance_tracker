@@ -25,6 +25,7 @@ export type AccountPayload = {
 
 export const accountsApi = {
   list: (accessToken: string, includeArchived = false) => apiClient<AccountDto[]>(`/accounts?includeArchived=${includeArchived}`, { accessToken }),
+  get: (accessToken: string, id: string) => apiClient<AccountDto>(`/accounts/${id}`, { accessToken }),
   create: (accessToken: string, payload: AccountPayload) => apiClient<AccountDto>("/accounts", { method: "POST", body: JSON.stringify(payload), accessToken }),
   update: (accessToken: string, id: string, payload: Omit<AccountPayload, "openingBalance">) => apiClient<AccountDto>(`/accounts/${id}`, { method: "PUT", body: JSON.stringify(payload), accessToken }),
   archive: (accessToken: string, id: string) => apiClient<void>(`/accounts/${id}`, { method: "DELETE", accessToken }),

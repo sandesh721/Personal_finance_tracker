@@ -539,6 +539,63 @@ a:focus-visible {
   border-radius: inherit;
   background: #0b9da4;
 }
+.lollipop-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.lollipop-chart__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr) max-content;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.lollipop-chart__label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.lollipop-chart__label-group small {
+  color: var(--color-text-muted);
+}
+
+.lollipop-chart__line-wrap {
+  position: relative;
+  height: 1rem;
+}
+
+.lollipop-chart__line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 0.18rem;
+  border-radius: 999px;
+  background: rgba(57, 62, 70, 0.14);
+  transform: translateY(-50%);
+}
+
+.lollipop-chart__dot {
+  position: absolute;
+  top: 50%;
+  width: 0.92rem;
+  height: 0.92rem;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.82);
+}
+
+.lollipop-chart__dot--other {
+  background: #9AA6B2;
+}
+
+.lollipop-chart__value {
+  white-space: nowrap;
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(0.9); opacity: 0.55; }
   50% { transform: scale(1); opacity: 1; }
@@ -744,6 +801,18 @@ a:focus-visible {
   color: rgba(220, 224, 229, 0.7);
 }
 @media (max-width: 980px) {
+  .dashboard-onboarding-card__hero {
+    flex-direction: column;
+  }
+
+  .dashboard-onboarding-card__actions {
+    align-items: flex-start;
+  }
+
+  .dashboard-onboarding-grid {
+    grid-template-columns: 1fr;
+  }
+
   .auth-shell,
   .shell-layout {
     padding: 0.85rem;
@@ -1547,6 +1616,19 @@ a:focus-visible {
   background: linear-gradient(90deg, rgba(117, 131, 148, 0.88), rgba(92, 203, 210, 0.72));
 }
 
+:root[data-theme="dark"] .health-tile {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(69, 85, 101, 0.4);
+}
+
+:root[data-theme="dark"] .lollipop-chart__line {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-theme="dark"] .lollipop-chart__dot {
+  box-shadow: 0 0 0 3px rgba(23, 32, 41, 0.92);
+}
+
 :root[data-theme="dark"] .stat-card--positive strong {
   color: var(--color-success);
 }
@@ -1744,6 +1826,81 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.dashboard-onboarding-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dashboard-onboarding-card__hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.dashboard-onboarding-card__hero h3 {
+  margin: 0 0 0.25rem;
+}
+
+.dashboard-onboarding-card__hero p:last-child {
+  margin: 0;
+  max-width: 42rem;
+}
+
+.dashboard-onboarding-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  align-items: flex-end;
+}
+
+.dashboard-onboarding-card__primary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-onboarding-card__secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.dashboard-onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.dashboard-onboarding-step {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(57, 62, 70, 0.1);
+  background: rgba(57, 62, 70, 0.03);
+}
+
+.dashboard-onboarding-step__index {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 173, 181, 0.12);
+  color: var(--color-accent-strong);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dashboard-onboarding-step p {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+}
+
 .dashboard-section {
   display: flex;
   flex-direction: column;
@@ -1817,6 +1974,15 @@ a:focus-visible {
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.2);
 }
 
+:root[data-theme="dark"] .dashboard-onboarding-step {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(69, 85, 101, 0.44);
+}
+
+:root[data-theme="dark"] .dashboard-onboarding-step__index {
+  background: rgba(92, 203, 210, 0.14);
+}
+
 :root[data-theme="dark"] .donut-snapshot__legend-row {
   border: 1px solid rgba(69, 85, 101, 0.32);
 }
@@ -1866,6 +2032,94 @@ a:focus-visible {
 :root[data-theme="dark"] .notifications-filter-button--active {
   background: rgba(92, 203, 210, 0.14);
   border-color: rgba(92, 203, 210, 0.24);
+}
+
+.account-card__link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-details-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.account-details-hero__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.account-details-hero__summary h3 {
+  margin: 0 0 0.2rem;
+}
+
+.account-details-hero__summary p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.account-details-hero__balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.account-details-hero__balance span,
+.account-details-hero__balance small,
+.transaction-activity__note {
+  color: var(--color-text-muted);
+}
+
+.account-details-hero__balance strong {
+  font-size: 1.4rem;
+}
+
+.account-details-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.account-details-pulse {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.account-details__link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-details-rule-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.transaction-activity__note {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 980px) {
+  .account-details-layout,
+  .account-details-pulse {
+    grid-template-columns: 1fr;
+  }
+
+  .account-details-hero__summary,
+  .account-details-hero__balance,
+  .account-details-rule-aside {
+    align-items: flex-start;
+  }
 }
 .recurring-automation-card {
   padding-bottom: 1.1rem;

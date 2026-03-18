@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
+import { AccountDetailsPage } from "../../features/accounts/pages/AccountDetailsPage";
 import { AccountsPage } from "../../features/accounts/pages/AccountsPage";
 import { AuthGuard } from "../../features/auth/components/AuthGuard";
 import { ForgotPasswordPage } from "../../features/auth/pages/ForgotPasswordPage";
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: <DashboardPage /> },
           { path: "/transactions", element: <TransactionsPage /> },
           { path: "/accounts", element: <AccountsPage /> },
+          { path: "/accounts/:accountId", element: <AccountDetailsPage /> },
           { path: "/categories", element: <CategoriesPage /> },
           { path: "/budgets", element: <BudgetsPage /> },
           { path: "/goals", element: <GoalsPage /> },

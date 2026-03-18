@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -172,6 +173,7 @@ export function AccountsPage() {
                   <div className="account-card__aside">
                     <strong>{formatCurrency(account.currentBalance, account.currencyCode)}</strong>
                     <div className="inline-actions">
+                      <Link to={`/accounts/${account.id}`} className="ghost-button ghost-button--small account-card__link-button">Details</Link>
                       <button type="button" className="ghost-button ghost-button--small" onClick={() => editAccount(account)}>Edit</button>
                       {!account.isArchived ? <button type="button" className="ghost-button ghost-button--small" onClick={() => archiveAccount(account.id)}>Archive</button> : null}
                     </div>

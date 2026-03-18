@@ -7,6 +7,7 @@ stronger recurring automation monitoring/retries
 more backend controller/integration test coverage
 admin page, gets notfication on system errors
 
+image to login page, enhance dashboard, bar graph to categories
 # Futur
 New user entry questions
 # Remaining TODOs

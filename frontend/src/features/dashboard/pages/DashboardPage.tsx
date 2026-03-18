@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { accountsApi } from "../../accounts/api/accountsApi";
 import { dashboardApi, type DashboardSummaryDto } from "../api/dashboardApi";
@@ -19,6 +20,8 @@ const goalBadges: Record<string, string> = {
   Car: "C",
   Gift: "G",
 };
+
+const spendingPalette = ["#00ADB5", "#F08F86", "#6F7D8C", "#A86523", "#7E57C2", "#4CAF50"];
 
 export function DashboardPage() {
   const { accessToken } = useAuth();
@@ -74,11 +77,62 @@ export function DashboardPage() {
   if (loading) return <PageLoader label="Loading dashboard" />;
   if (!summary) return <Alert message={errorMessage ?? "Dashboard is unavailable."} />;
 
+  const isFirstRun = accountCount === 0
+    && summary.recentTransactions.length === 0
+    && summary.budgetHealth.totalBudgeted === 0
+    && summary.goalProgress.length === 0
+    && summary.savingsAutomation.activeRecurringRulesCount === 0;
+
   return (
     <div className="page-stack dashboard-page">
       <SectionHeader title="Dashboard" description="A quick operating view of cashflow, balances, budgets, goals, recurring activity, and recent ledger movement." />
       {errorMessage ? <Alert message={errorMessage} /> : null}
 
+      {isFirstRun ? (
+        <section className="dashboard-section">
+          <section className="panel-card dashboard-onboarding-card">
+            <div className="dashboard-onboarding-card__hero">
+              <div>
+                <p className="eyebrow">Getting started</p>
+                <h3>Start tracking your money</h3>
+                <p>Create your first account, record a transaction, or set a budget to turn this empty workspace into a live financial dashboard.</p>
+              </div>
+              <div className="dashboard-onboarding-card__actions">
+                <Link to="/accounts" className="primary-button dashboard-onboarding-card__primary-link">Add your first account</Link>
+                <div className="dashboard-onboarding-card__secondary-actions">
+                  <Link to="/transactions" className="ghost-button">Add a transaction</Link>
+                  <Link to="/budgets" className="ghost-button">Create a budget</Link>
+                  <Link to="/goals" className="ghost-button">Create a goal</Link>
+                </div>
+              </div>
+            </div>
+            <div className="dashboard-onboarding-grid">
+              <article className="dashboard-onboarding-step">
+                <span className="dashboard-onboarding-step__index">1</span>
+                <div>
+                  <strong>Add an account</strong>
+                  <p>Set up a bank account, wallet, or savings ledger so balances and transfers have a safe place to live.</p>
+                </div>
+              </article>
+              <article className="dashboard-onboarding-step">
+                <span className="dashboard-onboarding-step__index">2</span>
+                <div>
+                  <strong>Record your first transaction</strong>
+                  <p>Add income, expenses, or transfers to start building cashflow history and recent activity.</p>
+                </div>
+              </article>
+              <article className="dashboard-onboarding-step">
+                <span className="dashboard-onboarding-step__index">3</span>
+                <div>
+                  <strong>Set a budget or goal</strong>
+                  <p>Track spending limits and savings targets once your first account and transactions are in place.</p>
+                </div>
+              </article>
+            </div>
+          </section>
+        </section>
+      ) : (
+        <>
       <section className="dashboard-section dashboard-section--hero">
         <div className="dashboard-hero-grid">
           <section className="panel-card panel-card--hero dashboard-hero-card">
@@ -152,37 +206,36 @@ export function DashboardPage() {
             {summary.spendingByCategory.length === 0 ? (
               <EmptyState title="No expense activity" description="The chart appears once expense transactions are recorded." />
             ) : (
-              <div className="chart-list">
-                {topSpendingCategories.map((item) => {
+              <div className="lollipop-chart">
+                {topSpendingCategories.map((item, index) => {
                   const share = currentMonthExpense > 0 ? (item.amount / currentMonthExpense) * 100 : 0;
+                  const color = spendingPalette[index % spendingPalette.length];
 
                   return (
-                    <div key={item.categoryId} className="chart-row">
-                      <div className="chart-row__label">
-                        <span>{item.categoryName}</span>
-                        <div className="chart-row__value">
-                          <strong>{formatCurrency(item.amount)}</strong>
-                          <small>{share.toFixed(1)}%</small>
-                        </div>
+                    <div key={item.categoryId} className="lollipop-chart__row">
+                      <div className="lollipop-chart__label-group">
+                        <strong>{item.categoryName}</strong>
+                        <small>{share.toFixed(1)}%</small>
                       </div>
-                      <div className="chart-bar">
-                        <div className="chart-bar__fill" style={{ width: `${(item.amount / (maxSpend || 1)) * 100}%` }} />
+                      <div className="lollipop-chart__line-wrap">
+                        <div className="lollipop-chart__line" />
+                        <span className="lollipop-chart__dot" style={{ left: `${Math.max(share, 8)}%`, background: color }} />
                       </div>
+                      <strong className="lollipop-chart__value">{formatCurrency(item.amount)}</strong>
                     </div>
                   );
                 })}
                 {remainingSpendingAmount > 0 ? (
-                  <div className="chart-row chart-row--summary">
-                    <div className="chart-row__label">
-                      <span>Other categories</span>
-                      <div className="chart-row__value">
-                        <strong>{formatCurrency(remainingSpendingAmount)}</strong>
-                        <small>{((remainingSpendingAmount / currentMonthExpense) * 100).toFixed(1)}%</small>
-                      </div>
+                  <div className="lollipop-chart__row lollipop-chart__row--other">
+                    <div className="lollipop-chart__label-group">
+                      <strong>Other</strong>
+                      <small>{((remainingSpendingAmount / currentMonthExpense) * 100).toFixed(1)}%</small>
                     </div>
-                    <div className="chart-bar chart-bar--muted">
-                      <div className="chart-bar__fill chart-bar__fill--secondary" style={{ width: `${(remainingSpendingAmount / (maxSpend || 1)) * 100}%` }} />
+                    <div className="lollipop-chart__line-wrap">
+                      <div className="lollipop-chart__line" />
+                      <span className="lollipop-chart__dot lollipop-chart__dot--other" style={{ left: `${Math.max((remainingSpendingAmount / currentMonthExpense) * 100, 8)}%` }} />
                     </div>
+                    <strong className="lollipop-chart__value">{formatCurrency(remainingSpendingAmount)}</strong>
                   </div>
                 ) : null}
               </div>
@@ -348,6 +401,8 @@ export function DashboardPage() {
           </section>
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }
