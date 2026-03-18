@@ -205,6 +205,15 @@ a:focus-visible {
   padding: 0.45rem 0.68rem;
   font-size: 0.82rem;
 }
+
+.sidebar-logout-button {
+  color: #ffffff;
+}
+
+.sidebar-logout-button:hover,
+.sidebar-logout-button:visited {
+  color: #ffffff;
+}
 .alert-banner {
   border-radius: var(--radius-sm);
   padding: 0.9rem 1rem;
@@ -376,14 +385,10 @@ a:focus-visible {
 .panel-card--hero {
   min-height: 100%;
 }
-.panel-card--large {
-  min-height: 21rem;
-}
-.panel-card--medium {
-  min-height: 16.5rem;
-}
+.panel-card--large,
+.panel-card--medium,
 .panel-card--compact {
-  min-height: 14rem;
+  min-height: auto;
 }
 .panel-card,
 .placeholder-card,
@@ -823,6 +828,11 @@ a:focus-visible {
   }
   .filter-row__action {
     min-width: auto;
+  }
+
+  .transaction-activity__topline {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
@@ -1275,6 +1285,66 @@ a:focus-visible {
   gap: 0.7rem;
 }
 
+.list-row--transaction-activity {
+  align-items: flex-start;
+}
+
+.activity-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-top: 0.4rem;
+}
+
+.activity-dot--income {
+  background: var(--color-success);
+}
+
+.activity-dot--expense {
+  background: var(--color-danger);
+}
+
+.activity-dot--transfer {
+  background: var(--color-accent);
+}
+
+.transaction-activity__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.transaction-activity__topline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.transaction-activity__title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.transaction-activity__amount-value {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.transaction-activity__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+}
+
 .dashboard-inline-progress {
   display: flex;
   flex-direction: column;
@@ -1684,19 +1754,17 @@ a:focus-visible {
   margin-bottom: 0.1rem;
 }
 
-.dashboard-grid--large {
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  align-items: start;
+.dashboard-flow {
+  column-count: 2;
+  column-gap: 0.85rem;
 }
 
-.dashboard-grid--medium {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-}
-
-.dashboard-grid--compact {
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  align-items: start;
+.dashboard-flow__item {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 0.85rem;
+  break-inside: avoid;
+  vertical-align: top;
 }
 
 .dashboard-card-large,

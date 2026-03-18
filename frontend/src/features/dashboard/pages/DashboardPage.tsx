@@ -27,7 +27,9 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => { void load(); }, [accessToken]);
+  useEffect(() => {
+    void load();
+  }, [accessToken]);
 
   async function load() {
     if (!accessToken) return;
@@ -46,6 +48,10 @@ export function DashboardPage() {
 
   const maxSpend = useMemo(() => Math.max(...(summary?.spendingByCategory.map((item) => item.amount) ?? [0])), [summary]);
   const maxAccountBalance = useMemo(() => Math.max(...(summary?.accountBalanceDistribution.map((item) => item.currentBalance) ?? [0])), [summary]);
+  const totalAccountBalance = useMemo(
+    () => summary?.accountBalanceDistribution.reduce((total, item) => total + item.currentBalance, 0) ?? 0,
+    [summary]
+  );
   const currentMonthIncome = summary?.currentMonthIncome ?? 0;
   const currentMonthExpense = summary?.currentMonthExpense ?? 0;
   const budgetUsage = summary?.budgetHealth.totalBudgeted
@@ -54,6 +60,13 @@ export function DashboardPage() {
   const currentMonthCashflowTotal = currentMonthIncome + currentMonthExpense;
   const incomeShare = currentMonthCashflowTotal > 0 ? (currentMonthIncome / currentMonthCashflowTotal) * 100 : 0;
   const expenseShare = currentMonthCashflowTotal > 0 ? (currentMonthExpense / currentMonthCashflowTotal) * 100 : 0;
+  const topSpendingCategories = useMemo(() => summary?.spendingByCategory.slice(0, 5) ?? [], [summary]);
+  const remainingSpendingAmount = useMemo(() => {
+    if (!summary || summary.spendingByCategory.length <= 5) return 0;
+    return summary.spendingByCategory.slice(5).reduce((total, item) => total + item.amount, 0);
+  }, [summary]);
+  const topBudgetUsage = useMemo(() => summary?.budgetUsage.slice(0, 4) ?? [], [summary]);
+  const topGoalProgress = useMemo(() => summary?.goalProgress.slice(0, 3) ?? [], [summary]);
   const incomeExpenseChartStyle = {
     background: `conic-gradient(var(--color-success) 0deg ${(incomeShare / 100) * 360}deg, var(--color-danger) ${(incomeShare / 100) * 360}deg 360deg)`,
   };
@@ -130,32 +143,53 @@ export function DashboardPage() {
       </section>
 
       <section className="dashboard-section">
-        <div className="dashboard-grid dashboard-grid--large">
-          <section className="panel-card panel-card--large dashboard-card-large">
+        <div className="dashboard-flow">
+          <section className="panel-card panel-card--large dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Spending by category</h3>
-              <p>Current month expense distribution.</p>
+              <p>Current month expense distribution with the highest-impact categories first.</p>
             </div>
             {summary.spendingByCategory.length === 0 ? (
               <EmptyState title="No expense activity" description="The chart appears once expense transactions are recorded." />
             ) : (
               <div className="chart-list">
-                {summary.spendingByCategory.map((item) => (
-                  <div key={item.categoryId} className="chart-row">
-                    <div className="chart-row__label">
-                      <span>{item.categoryName}</span>
-                      <strong>{formatCurrency(item.amount)}</strong>
+                {topSpendingCategories.map((item) => {
+                  const share = currentMonthExpense > 0 ? (item.amount / currentMonthExpense) * 100 : 0;
+
+                  return (
+                    <div key={item.categoryId} className="chart-row">
+                      <div className="chart-row__label">
+                        <span>{item.categoryName}</span>
+                        <div className="chart-row__value">
+                          <strong>{formatCurrency(item.amount)}</strong>
+                          <small>{share.toFixed(1)}%</small>
+                        </div>
+                      </div>
+                      <div className="chart-bar">
+                        <div className="chart-bar__fill" style={{ width: `${(item.amount / (maxSpend || 1)) * 100}%` }} />
+                      </div>
                     </div>
-                    <div className="chart-bar">
-                      <div className="chart-bar__fill" style={{ width: `${(item.amount / (maxSpend || 1)) * 100}%` }} />
+                  );
+                })}
+                {remainingSpendingAmount > 0 ? (
+                  <div className="chart-row chart-row--summary">
+                    <div className="chart-row__label">
+                      <span>Other categories</span>
+                      <div className="chart-row__value">
+                        <strong>{formatCurrency(remainingSpendingAmount)}</strong>
+                        <small>{((remainingSpendingAmount / currentMonthExpense) * 100).toFixed(1)}%</small>
+                      </div>
+                    </div>
+                    <div className="chart-bar chart-bar--muted">
+                      <div className="chart-bar__fill chart-bar__fill--secondary" style={{ width: `${(remainingSpendingAmount / (maxSpend || 1)) * 100}%` }} />
                     </div>
                   </div>
-                ))}
+                ) : null}
               </div>
             )}
           </section>
 
-          <section className="panel-card panel-card--large dashboard-card-large">
+          <section className="panel-card panel-card--large dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Recent transactions</h3>
               <p>Latest five recorded transactions across your ledger.</p>
@@ -165,23 +199,26 @@ export function DashboardPage() {
             ) : (
               <div className="simple-list">
                 {summary.recentTransactions.slice(0, 5).map((item) => (
-                  <div key={item.id} className="list-row">
-                    <div>
-                      <strong>{item.merchant || item.categoryName || item.type}</strong>
-                      <p>{item.accountName} | {formatDate(item.dateUtc)}</p>
+                  <div key={item.id} className="list-row list-row--transaction-activity">
+                    <div className={`activity-dot activity-dot--${item.type.toLowerCase()}`} />
+                    <div className="transaction-activity__body">
+                      <div className="transaction-activity__topline">
+                        <strong className="transaction-activity__title">{item.merchant || item.categoryName || item.type}</strong>
+                        <strong className="transaction-activity__amount-value">{formatCurrency(item.amount)}</strong>
+                      </div>
+                      <div className="transaction-activity__meta">
+                        <span>{item.accountName}</span>
+                        <span className={`transaction-type-pill transaction-type-pill--${item.type.toLowerCase()}`}>{item.categoryName || item.type}</span>
+                        <span>{formatDate(item.dateUtc)}</span>
+                      </div>
                     </div>
-                    <strong>{formatCurrency(item.amount)}</strong>
                   </div>
                 ))}
               </div>
             )}
           </section>
-        </div>
-      </section>
 
-      <section className="dashboard-section">
-        <div className="dashboard-grid dashboard-grid--medium">
-          <section className="panel-card panel-card--medium dashboard-card-medium">
+          <section className="panel-card panel-card--medium dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Budget usage</h3>
               <p>Highest pressure budget categories this month.</p>
@@ -190,7 +227,7 @@ export function DashboardPage() {
               <EmptyState title="No budgets configured" description="Create monthly budgets to compare plan versus actual spending." />
             ) : (
               <div className="simple-list">
-                {summary.budgetUsage.map((item) => (
+                {topBudgetUsage.map((item) => (
                   <div key={item.budgetId} className="list-row list-row--stacked">
                     <div>
                       <strong>{item.categoryName}</strong>
@@ -206,7 +243,7 @@ export function DashboardPage() {
             )}
           </section>
 
-          <section className="panel-card panel-card--medium dashboard-card-medium">
+          <section className="panel-card panel-card--medium dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Account balance split</h3>
               <p>Current balance distribution across active accounts.</p>
@@ -214,27 +251,38 @@ export function DashboardPage() {
             {summary.accountBalanceDistribution.length === 0 ? (
               <EmptyState title="No accounts available" description="Account balances will appear here once your ledgers are set up." />
             ) : (
-              <div className="chart-list">
-                {summary.accountBalanceDistribution.map((item) => (
-                  <div key={item.accountId} className="chart-row">
-                    <div className="chart-row__label">
-                      <span>{item.accountName}</span>
-                      <strong>{formatCurrency(item.currentBalance, item.currencyCode)}</strong>
+              <div className="balance-split">
+                <div className="balance-split__track">
+                  {summary.accountBalanceDistribution.map((item) => (
+                    <span
+                      key={item.accountId}
+                      className="balance-split__segment"
+                      style={{ width: `${Math.max((item.currentBalance / (totalAccountBalance || 1)) * 100, 6)}%` }}
+                      title={`${item.accountName}: ${formatCurrency(item.currentBalance, item.currencyCode)}`}
+                    />
+                  ))}
+                </div>
+                <div className="chart-list">
+                  {summary.accountBalanceDistribution.map((item) => (
+                    <div key={item.accountId} className="chart-row">
+                      <div className="chart-row__label">
+                        <span>{item.accountName}</span>
+                        <div className="chart-row__value">
+                          <strong>{formatCurrency(item.currentBalance, item.currencyCode)}</strong>
+                          <small>{((item.currentBalance / (totalAccountBalance || 1)) * 100).toFixed(1)}%</small>
+                        </div>
+                      </div>
+                      <div className="chart-bar chart-bar--muted">
+                        <div className="chart-bar__fill chart-bar__fill--secondary" style={{ width: `${(item.currentBalance / (maxAccountBalance || 1)) * 100}%` }} />
+                      </div>
                     </div>
-                    <div className="chart-bar chart-bar--muted">
-                      <div className="chart-bar__fill chart-bar__fill--secondary" style={{ width: `${(item.currentBalance / (maxAccountBalance || 1)) * 100}%` }} />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </section>
-        </div>
-      </section>
 
-      <section className="dashboard-section">
-        <div className="dashboard-grid dashboard-grid--compact">
-          <section className="panel-card panel-card--compact dashboard-card-compact">
+          <section className="panel-card panel-card--compact dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Goal progress</h3>
               <p>Most relevant active and completed goals.</p>
@@ -243,7 +291,7 @@ export function DashboardPage() {
               <EmptyState title="No goals yet" description="Create savings goals to track progress against your targets." />
             ) : (
               <div className="simple-list">
-                {summary.goalProgress.map((goal) => (
+                {topGoalProgress.map((goal) => (
                   <div key={goal.goalId} className={`list-row list-row--stacked goal-progress-row goal-progress-row--${goal.color ?? "teal"}`}>
                     <div className="goal-progress-row__header">
                       <div className="goal-card__title-group">
@@ -267,7 +315,7 @@ export function DashboardPage() {
             )}
           </section>
 
-          <section className="panel-card panel-card--compact dashboard-card-compact">
+          <section className="panel-card panel-card--compact dashboard-flow__item">
             <div className="panel-card__header">
               <h3>Budget health</h3>
               <p>Current month budget performance across planned expense categories.</p>
@@ -281,10 +329,19 @@ export function DashboardPage() {
                   <span>{budgetUsage.toFixed(2)}% used</span>
                 </div>
                 <ProgressBar value={budgetUsage} tone={summary.budgetHealth.overBudgetCount > 0 ? "danger" : summary.budgetHealth.thresholdReachedCount > 0 ? "warning" : "default"} />
-                <div className="budget-card__metrics">
-                  <span>{formatCurrency(summary.budgetHealth.totalRemaining)} remaining</span>
-                  <span>{summary.budgetHealth.thresholdReachedCount} threshold warnings</span>
-                  <span>{summary.budgetHealth.overBudgetCount} over budget</span>
+                <div className="health-tile-grid">
+                  <div className="health-tile">
+                    <strong>{formatCurrency(summary.budgetHealth.totalRemaining)}</strong>
+                    <span>Remaining</span>
+                  </div>
+                  <div className="health-tile">
+                    <strong>{summary.budgetHealth.thresholdReachedCount}</strong>
+                    <span>Warnings</span>
+                  </div>
+                  <div className="health-tile">
+                    <strong>{summary.budgetHealth.overBudgetCount}</strong>
+                    <span>Over budget</span>
+                  </div>
                 </div>
               </div>
             )}

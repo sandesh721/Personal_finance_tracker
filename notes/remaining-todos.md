@@ -1,3 +1,14 @@
+real email notifications beyond password reset
+PDF export
+richer reports/visuals
+account details page
+data import
+stronger recurring automation monitoring/retries
+more backend controller/integration test coverage
+admin page, gets notfication on system errors
+
+# Futur
+New user entry questions
 # Remaining TODOs
 
 This checklist compares the current implementation against the product spec and our build decisions so far.
