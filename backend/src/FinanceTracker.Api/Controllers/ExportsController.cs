@@ -6,11 +6,13 @@ using FinanceTracker.Application.Transactions.DTOs;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FinanceTracker.Api.Controllers;
 
 [ApiController]
 [Authorize]
+[EnableRateLimiting("ExportHeavy")]
 [Route("api/exports")]
 public sealed class ExportsController(
     IExportService exportService,

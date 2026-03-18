@@ -16,6 +16,7 @@ public sealed class RecurringTransactionExecutionConfiguration : IEntityTypeConf
 
         builder.HasIndex(x => new { x.RecurringTransactionRuleId, x.ScheduledForDateUtc }).IsUnique();
         builder.HasIndex(x => new { x.Status, x.ProcessedAtUtc });
+        builder.HasIndex(x => new { x.Status, x.NextRetryAfterUtc });
 
         builder.HasOne(x => x.RecurringTransactionRule)
             .WithMany(x => x.Executions)

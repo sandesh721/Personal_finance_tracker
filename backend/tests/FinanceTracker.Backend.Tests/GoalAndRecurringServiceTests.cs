@@ -1,3 +1,4 @@
+using FinanceTracker.Application.Automation.DTOs;
 using FinanceTracker.Application.Goals.DTOs;
 using FinanceTracker.Application.Notifications.Interfaces;
 using FinanceTracker.Application.RecurringTransactions.DTOs;
@@ -80,7 +81,7 @@ public sealed class GoalAndRecurringServiceTests
         await dbContext.SaveChangesAsync();
 
         INotificationService notificationService = new NotificationService(dbContext);
-        var recurringService = new RecurringTransactionService(dbContext, new TransactionService(dbContext, new CategorySeeder(dbContext)), notificationService);
+        var recurringService = CreateRecurringService(dbContext, notificationService);
         await recurringService.CreateAsync(user.Id, new CreateRecurringTransactionRequest
         {
             Title = "Monthly utilities",
@@ -103,6 +104,74 @@ public sealed class GoalAndRecurringServiceTests
     }
 
     [Fact]
+    public async Task ProcessDue_FailedExecution_SchedulesRetry_AndStopsAfterMaxAttempts()
+    {
+        await using var database = new SqliteTestDatabase();
+        await using var dbContext = database.CreateContext();
+        var user = TestData.AddUser(dbContext);
+        var account = TestData.AddAccount(dbContext, user.Id, "Checking", 1000m);
+        var category = TestData.AddCategory(dbContext, user.Id, "Rent", CategoryType.Expense);
+        await dbContext.SaveChangesAsync();
+
+        INotificationService notificationService = new NotificationService(dbContext);
+        var recurringService = CreateRecurringService(dbContext, notificationService, new AutomationOptions
+        {
+            MaxRecurringRetryAttempts = 3,
+            InitialRetryDelaySeconds = 15,
+            MaxRetryDelaySeconds = 60
+        });
+
+        await recurringService.CreateAsync(user.Id, new CreateRecurringTransactionRequest
+        {
+            Title = "Monthly rent",
+            Type = TransactionType.Expense,
+            Amount = 800m,
+            CategoryId = category.Id,
+            AccountId = account.Id,
+            Frequency = RecurringFrequency.Monthly,
+            StartDateUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            AutoCreateTransaction = true
+        }, CancellationToken.None);
+
+        account.IsArchived = true;
+        await dbContext.SaveChangesAsync();
+
+        var firstRun = await recurringService.ProcessDueAsync(user.Id, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+        var execution = await dbContext.RecurringTransactionExecutions.SingleAsync();
+
+        Assert.Equal(1, firstRun.OccurrencesDeferredForRetry);
+        Assert.Equal(1, execution.AttemptCount);
+        Assert.NotNull(execution.NextRetryAfterUtc);
+        Assert.Equal(1, await dbContext.UserNotifications.CountAsync(x => x.Type == NotificationType.RecurringExecutionFailed));
+
+        var secondRunWhileBackingOff = await recurringService.ProcessDueAsync(user.Id, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+        execution = await dbContext.RecurringTransactionExecutions.SingleAsync();
+
+        Assert.Equal(1, secondRunWhileBackingOff.OccurrencesDeferredForRetry);
+        Assert.Equal(1, execution.AttemptCount);
+
+        execution.NextRetryAfterUtc = DateTime.UtcNow.AddSeconds(-1);
+        await dbContext.SaveChangesAsync();
+        var secondAttempt = await recurringService.ProcessDueAsync(user.Id, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        execution = await dbContext.RecurringTransactionExecutions.SingleAsync();
+        Assert.Equal(1, secondAttempt.OccurrencesDeferredForRetry);
+        Assert.Equal(2, execution.AttemptCount);
+        Assert.NotNull(execution.NextRetryAfterUtc);
+        Assert.Equal(1, await dbContext.UserNotifications.CountAsync(x => x.Type == NotificationType.RecurringExecutionFailed));
+
+        execution.NextRetryAfterUtc = DateTime.UtcNow.AddSeconds(-1);
+        await dbContext.SaveChangesAsync();
+        var thirdAttempt = await recurringService.ProcessDueAsync(user.Id, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        execution = await dbContext.RecurringTransactionExecutions.SingleAsync();
+        Assert.Equal(1, thirdAttempt.OccurrencesFailedPermanently);
+        Assert.Equal(3, execution.AttemptCount);
+        Assert.Null(execution.NextRetryAfterUtc);
+        Assert.Equal(2, await dbContext.UserNotifications.CountAsync(x => x.Type == NotificationType.RecurringExecutionFailed));
+    }
+
+    [Fact]
     public async Task AutomationRun_CreatesReminderForManualRecurringRule()
     {
         await using var database = new SqliteTestDatabase();
@@ -113,7 +182,7 @@ public sealed class GoalAndRecurringServiceTests
         await dbContext.SaveChangesAsync();
 
         INotificationService notificationService = new NotificationService(dbContext);
-        var recurringService = new RecurringTransactionService(dbContext, new TransactionService(dbContext, new CategorySeeder(dbContext)), notificationService);
+        var recurringService = CreateRecurringService(dbContext, notificationService);
         await recurringService.CreateAsync(user.Id, new CreateRecurringTransactionRequest
         {
             Title = "Monthly rent reminder",
@@ -130,7 +199,7 @@ public sealed class GoalAndRecurringServiceTests
             dbContext,
             recurringService,
             notificationService,
-            Options.Create(new AutomationOptions { PollingIntervalSeconds = 60, GoalReminderLookaheadDays = 7 }),
+            Options.Create(new AutomationOptions { PollingIntervalSeconds = 60, GoalReminderLookaheadDays = 7, MaxRecurringRetryAttempts = 3, InitialRetryDelaySeconds = 60, MaxRetryDelaySeconds = 900 }),
             NullLogger<AutomationService>.Instance);
 
         var result = await automationService.RunAsync(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), CancellationToken.None);
@@ -140,7 +209,58 @@ public sealed class GoalAndRecurringServiceTests
 
         Assert.Equal(1, result.ManualRemindersCreated);
         Assert.Equal(RecurringExecutionStatus.Reminded, execution.Status);
+        Assert.Equal(1, execution.AttemptCount);
         Assert.Equal(new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc), rule.NextRunDateUtc);
         Assert.Equal(NotificationType.RecurringDueReminder, notification.Type);
     }
+
+    [Fact]
+    public void AutomationStatusTracker_TracksFailuresSuccessAndNextAttempt()
+    {
+        var tracker = new AutomationStatusTracker();
+        var startedUtc = new DateTime(2026, 3, 18, 10, 0, 0, DateTimeKind.Utc);
+        var firstRetryUtc = startedUtc.AddMinutes(2);
+        var secondRetryUtc = startedUtc.AddMinutes(5);
+        var successUtc = startedUtc.AddMinutes(8);
+        var nextPlannedUtc = startedUtc.AddMinutes(9);
+
+        tracker.RecordStarted(startedUtc);
+        var firstFailureCount = tracker.RecordFailed(startedUtc.AddMinutes(1), "First failure", firstRetryUtc);
+        var secondFailureCount = tracker.RecordFailed(startedUtc.AddMinutes(4), "Second failure", secondRetryUtc);
+        tracker.RecordStarted(startedUtc.AddMinutes(7));
+        tracker.RecordSucceeded(new AutomationRunSummaryDto(1, 2, 2, 1, 0, 1, 0, successUtc), successUtc, nextPlannedUtc);
+
+        var snapshot = tracker.GetSnapshot(true, 60);
+
+        Assert.Equal(1, firstFailureCount);
+        Assert.Equal(2, secondFailureCount);
+        Assert.True(snapshot.BackgroundProcessingEnabled);
+        Assert.True(snapshot.LastRunSucceeded);
+        Assert.False(snapshot.IsCycleRunning);
+        Assert.Equal(0, snapshot.ConsecutiveFailureCount);
+        Assert.Equal(2, snapshot.TotalFailureCount);
+        Assert.Equal(successUtc, snapshot.LastSuccessfulCompletedUtc);
+        Assert.Equal(nextPlannedUtc, snapshot.NextAttemptUtc);
+        Assert.NotNull(snapshot.LastSummary);
+        Assert.Equal(1, snapshot.LastSummary!.AutoOccurrencesDeferredForRetry);
+    }
+
+    private static RecurringTransactionService CreateRecurringService(
+        FinanceTracker.Infrastructure.Persistence.ApplicationDbContext dbContext,
+        INotificationService notificationService,
+        AutomationOptions? options = null)
+        => new(
+            dbContext,
+            new TransactionService(dbContext, new CategorySeeder(dbContext)),
+            notificationService,
+            Options.Create(options ?? new AutomationOptions
+            {
+                PollingIntervalSeconds = 60,
+                GoalReminderLookaheadDays = 7,
+                MaxRecurringRetryAttempts = 3,
+                InitialRetryDelaySeconds = 60,
+                MaxRetryDelaySeconds = 900
+            }));
 }
+
+

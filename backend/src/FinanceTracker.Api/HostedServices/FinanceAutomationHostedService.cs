@@ -28,7 +28,8 @@ public sealed class FinanceAutomationHostedService(
                     using var scope = scopeFactory.CreateScope();
                     var automationService = scope.ServiceProvider.GetRequiredService<IAutomationService>();
                     var summary = await automationService.RunAsync(startedUtc, stoppingToken);
-                    statusTracker.RecordSucceeded(summary, DateTime.UtcNow);
+                    var completedUtc = DateTime.UtcNow;
+                    statusTracker.RecordSucceeded(summary, completedUtc, completedUtc.Add(delay));
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -36,7 +37,11 @@ public sealed class FinanceAutomationHostedService(
                 }
                 catch (Exception ex)
                 {
-                    statusTracker.RecordFailed(DateTime.UtcNow, ex.Message);
+                    var completedUtc = DateTime.UtcNow;
+                    var currentState = statusTracker.GetSnapshot(options.EnableBackgroundProcessing, options.PollingIntervalSeconds);
+                    var nextFailureCount = currentState.ConsecutiveFailureCount + 1;
+                    delay = ComputeFailureDelay(options, nextFailureCount);
+                    statusTracker.RecordFailed(completedUtc, ex.Message, completedUtc.Add(delay));
                     logger.LogError(ex, "Automation cycle failed.");
                 }
             }
@@ -50,5 +55,15 @@ public sealed class FinanceAutomationHostedService(
                 break;
             }
         }
+    }
+
+    private static TimeSpan ComputeFailureDelay(AutomationOptions options, int consecutiveFailureCount)
+    {
+        var baseDelaySeconds = Math.Max(options.InitialRetryDelaySeconds, Math.Max(options.PollingIntervalSeconds, 15));
+        var maxDelaySeconds = Math.Max(options.MaxRetryDelaySeconds, baseDelaySeconds);
+        var safeExponent = Math.Min(Math.Max(consecutiveFailureCount - 1, 0), 10);
+        var scaledSeconds = baseDelaySeconds * Math.Pow(2, safeExponent);
+        var boundedSeconds = Math.Min(maxDelaySeconds, scaledSeconds);
+        return TimeSpan.FromSeconds(Math.Max(baseDelaySeconds, boundedSeconds));
     }
 }

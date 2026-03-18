@@ -1158,3 +1158,182 @@ The best remaining cleanup sequence from here is:
 - perform one last dark-theme consistency review across all pages
 - group and commit current work in safe logical chunks
 - then move to optional growth items such as PDF export, richer reporting visuals, account detail pages, or data import
+
+## Phase 5 Continued - Dashboard UX, Account Details, Automation Hardening, and API Protection
+
+### Scope Delivered
+
+This pass extended the post-phase-5 work with a mix of product polish and backend hardening:
+
+- account details page for deeper account-level inspection
+- first-time-user dashboard onboarding state instead of empty analytics
+- dashboard layout and visualization refinement, especially below the top cashflow visual
+- stronger recurring automation monitoring with bounded retries and richer scheduler health status
+- backend controller coverage for automation and recurring endpoints
+- API rate limiting for auth-sensitive, report-heavy, and export-heavy endpoints
+
+### Account Details Page
+
+Account navigation now includes a dedicated details experience.
+
+Added:
+
+- route: `/accounts/:accountId`
+- account overview summary
+- opening balance vs current balance vs net change
+- recent activity for the selected account
+- linked goals tied to that account
+- recurring rules tied to that account
+
+This gives users a drill-down surface without overloading the main accounts list.
+
+### Dashboard UX Refinement
+
+The dashboard was improved in several iterations after the initial chart work.
+
+Key product choices now in place:
+
+- the top `Current month income vs expense` visual remains the primary anchor
+- the `2 x 2` summary cards remain beside that top visual
+- a true first-time-user empty state replaces the normal lower analytics when the user has no real financial setup yet
+- the onboarding dashboard uses direct actions such as:
+  - add first account
+  - add transaction
+  - create budget
+  - create goal
+- lower dashboard cards were tightened so they behave more like content-fit panels instead of fixed-height empty boxes
+- `Recent transactions` was reformatted into a clearer two-line activity feed
+- `Spending by category` was refined through several experiments and is now aligned to a more finance-friendly comparative layout rather than decorative charting
+
+Product reasoning:
+
+- empty analytics cards create a “broken app” feeling for brand new users
+- finance dashboards benefit more from compact comparison views than decorative chart experiments
+- activity lists need stronger visual hierarchy than raw metadata blocks
+
+### Stronger Recurring Automation Monitoring and Retries
+
+Recurring automation is now safer under repeated failure conditions.
+
+Added recurring execution tracking fields:
+
+- `AttemptCount`
+- `LastAttemptedUtc`
+- `NextRetryAfterUtc`
+
+Migration added:
+
+- `20260318111553_AddRecurringAutomationRetryTracking`
+
+Behavior changes:
+
+- failed recurring auto-executions no longer retry blindly every polling cycle
+- retries are now bounded by configuration
+- retry delay uses backoff rather than immediate hammering
+- once max retry attempts are exhausted, the execution stops retrying automatically and becomes a manual-attention case
+- first failure and final exhausted failure both remain visible through notifications and scheduler status
+
+New automation configuration values:
+
+- `MaxRecurringRetryAttempts`
+- `InitialRetryDelaySeconds`
+- `MaxRetryDelaySeconds`
+
+### Scheduler Health Visibility Improvements
+
+Automation status is now more operationally useful.
+
+`GET /api/automation/status` now exposes richer health metadata including:
+
+- background-processing enabled state
+- polling interval
+- last started time
+- last completed time
+- last successful completion time
+- whether a cycle is currently running
+- consecutive failure count
+- total failure count
+- next planned attempt time
+- last error
+- last run summary
+
+This makes the hosted automation loop much more production-observable even though it is still an in-process scheduler.
+
+### Additional Backend Test Coverage
+
+Backend coverage was expanded beyond service-only validation.
+
+Added and verified:
+
+- retry scheduling coverage for failed recurring executions
+- retry exhaustion coverage for recurring executions that continue failing
+- automation status tracker coverage for failure-count and next-attempt behavior
+- controller coverage for:
+  - `GET /api/automation/status`
+  - recurring create validation behavior
+  - recurring `process-due` behavior
+
+New test file:
+
+- `backend/tests/FinanceTracker.Backend.Tests/ControllerBehaviorTests.cs`
+
+Existing recurring coverage expanded in:
+
+- `backend/tests/FinanceTracker.Backend.Tests/GoalAndRecurringServiceTests.cs`
+
+The backend test project now references the API project so controller behavior can be exercised directly without introducing a separate test host layer.
+
+### API Rate Limiting
+
+Rate limiting was added at the API edge to protect the most abuse-prone and most expensive endpoints.
+
+Configured in `Program.cs` using ASP.NET Core rate limiting middleware.
+
+Policies added:
+
+- `AuthSensitive`
+  - applied to register, login, forgot-password, reset-password
+- `AuthSession`
+  - applied to refresh, logout, and `me`
+- `ReportHeavy`
+  - applied to report overview endpoints
+- `ExportHeavy`
+  - applied to CSV export endpoints
+
+Policy behavior:
+
+- auth-sensitive endpoints are keyed by client IP
+- report/export endpoints are keyed by authenticated user id, with IP fallback
+- rejected requests return `429 Too Many Requests`
+- `ProblemDetails` JSON is returned for rejected requests
+- `Retry-After` is emitted when available
+
+Why this was added:
+
+- reduce brute-force pressure on auth endpoints
+- prevent expensive exports/reports from being spammed by the same user
+- add simple production-sensible protection without changing business logic
+
+### Validation Status
+
+Verified in this pass:
+
+- `dotnet build src/FinanceTracker.Api/FinanceTracker.Api.csproj -c Release`
+- `dotnet build tests/FinanceTracker.Backend.Tests/FinanceTracker.Backend.Tests.csproj`
+- `dotnet test tests/FinanceTracker.Backend.Tests/FinanceTracker.Backend.Tests.csproj --no-build`
+
+### Current Notes On Remaining Work
+
+The major remaining work is now mostly optional growth and final polish rather than missing core finance capability.
+
+Most meaningful future options:
+
+- real email notifications beyond password reset
+- PDF export
+- richer reports/visuals
+- data import
+- deeper scheduler architecture if multi-instance deployment is required
+
+Operational note:
+
+- the in-process scheduler is now more observable and safer, but multi-instance deployments would still need leader coordination or an external job host later

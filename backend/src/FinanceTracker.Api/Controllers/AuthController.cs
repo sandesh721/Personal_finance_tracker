@@ -7,6 +7,7 @@ using FinanceTracker.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace FinanceTracker.Api.Controllers;
@@ -31,6 +32,7 @@ public sealed class AuthController(
     private readonly EmailOptions _emailOptions = emailOptions.Value;
     private readonly IWebHostEnvironment _environment = environment;
 
+    [EnableRateLimiting("AuthSensitive")]
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -55,6 +57,7 @@ public sealed class AuthController(
         }
     }
 
+    [EnableRateLimiting("AuthSensitive")]
     [HttpPost("login")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -79,6 +82,7 @@ public sealed class AuthController(
         }
     }
 
+    [EnableRateLimiting("AuthSensitive")]
     [HttpPost("forgot-password")]
     [ProducesResponseType(typeof(ForgotPasswordResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -105,6 +109,7 @@ public sealed class AuthController(
             _environment.IsDevelopment() && !_emailOptions.Enabled ? resetUrl : null));
     }
 
+    [EnableRateLimiting("AuthSensitive")]
     [HttpPost("reset-password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -121,6 +126,7 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    [EnableRateLimiting("AuthSession")]
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -145,6 +151,7 @@ public sealed class AuthController(
         }
     }
 
+    [EnableRateLimiting("AuthSession")]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
@@ -160,6 +167,7 @@ public sealed class AuthController(
     }
 
     [Authorize]
+    [EnableRateLimiting("AuthSession")]
     [HttpGet("me")]
     [ProducesResponseType(typeof(AuthenticatedUserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

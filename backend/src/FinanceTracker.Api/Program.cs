@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FinanceTracker.Api.Configuration;
 using FinanceTracker.Api.HealthChecks;
 using FinanceTracker.Api.HostedServices;
@@ -12,6 +13,7 @@ using FinanceTracker.Infrastructure;
 using FinanceTracker.Infrastructure.Automation;
 using FinanceTracker.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 
@@ -48,6 +50,9 @@ builder.Services
     .Bind(builder.Configuration.GetSection(AutomationOptions.SectionName))
     .Validate(options => options.PollingIntervalSeconds >= 15, "Automation polling interval must be at least 15 seconds.")
     .Validate(options => options.GoalReminderLookaheadDays is >= 1 and <= 30, "Goal reminder lookahead must be between 1 and 30 days.")
+    .Validate(options => options.MaxRecurringRetryAttempts is >= 1 and <= 10, "Automation retry attempts must be between 1 and 10.")
+    .Validate(options => options.InitialRetryDelaySeconds >= 15, "Automation initial retry delay must be at least 15 seconds.")
+    .Validate(options => options.MaxRetryDelaySeconds >= options.InitialRetryDelaySeconds, "Automation max retry delay must be greater than or equal to the initial retry delay.")
     .ValidateOnStart();
 
 builder.Services
@@ -80,6 +85,73 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", failureStatus: HealthStatus.Unhealthy, tags: ["ready"])
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Title = "Too many requests.",
+            Detail = "Please wait a moment before retrying this operation.",
+            Status = StatusCodes.Status429TooManyRequests
+        }, cancellationToken: cancellationToken);
+    };
+
+    options.AddPolicy("AuthSensitive", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"auth-sensitive:{GetRequestIdentity(context)}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("AuthSession", context =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: $"auth-session:{GetRequestIdentity(context)}",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("ReportHeavy", context =>
+        RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: $"report-heavy:{GetUserOrIpIdentity(context)}",
+            factory: _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = 12,
+                TokensPerPeriod = 12,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("ExportHeavy", context =>
+        RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: $"export-heavy:{GetUserOrIpIdentity(context)}",
+            factory: _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = 4,
+                TokensPerPeriod = 4,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 builder.Services.AddCors(options =>
 {
@@ -126,6 +198,7 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
@@ -139,3 +212,20 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 app.MapControllers();
 
 app.Run();
+
+static string GetRequestIdentity(HttpContext context)
+{
+    var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(forwardedFor))
+    {
+        return forwardedFor.Split(',')[0].Trim();
+    }
+
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
+
+static string GetUserOrIpIdentity(HttpContext context)
+{
+    var userId = context.User.FindFirst("sub")?.Value;
+    return !string.IsNullOrWhiteSpace(userId) ? userId : GetRequestIdentity(context);
+}

@@ -5,4 +5,6 @@ public sealed record RecurringExecutionSummaryDto(
     int TransactionsCreated,
     int OccurrencesProcessed,
     int OccurrencesSkipped,
+    int OccurrencesDeferredForRetry,
+    int OccurrencesFailedPermanently,
     DateTime ProcessedAtUtc);

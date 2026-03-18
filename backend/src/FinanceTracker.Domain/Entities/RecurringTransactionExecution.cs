@@ -9,6 +9,9 @@ public sealed class RecurringTransactionExecution : AuditableEntity
     public Guid RecurringTransactionRuleId { get; set; }
     public DateTime ScheduledForDateUtc { get; set; }
     public RecurringExecutionStatus Status { get; set; } = RecurringExecutionStatus.Processing;
+    public int AttemptCount { get; set; }
+    public DateTime? LastAttemptedUtc { get; set; }
+    public DateTime? NextRetryAfterUtc { get; set; }
     public Guid? TransactionId { get; set; }
     public DateTime? ProcessedAtUtc { get; set; }
     public string? FailureReason { get; set; }

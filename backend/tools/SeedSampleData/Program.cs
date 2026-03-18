@@ -25,7 +25,7 @@ var accountService = new AccountService(dbContext);
 var transactionService = new TransactionService(dbContext, categorySeeder);
 var budgetService = new BudgetService(dbContext);
 var goalService = new GoalService(dbContext, notificationService);
-var recurringService = new RecurringTransactionService(dbContext, transactionService, notificationService);
+var recurringService = new RecurringTransactionService(dbContext, transactionService, notificationService, Microsoft.Extensions.Options.Options.Create(new FinanceTracker.Infrastructure.Automation.AutomationOptions()));
 
 var users = await dbContext.Users
     .AsNoTracking()
@@ -416,3 +416,4 @@ static string LoadConnectionString(string rootPath)
 
     throw new InvalidOperationException("ConnectionStrings__DefaultConnection was not found in backend/.env.");
 }
+

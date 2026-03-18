@@ -4,11 +4,13 @@ using FinanceTracker.Application.Reports.Interfaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FinanceTracker.Api.Controllers;
 
 [ApiController]
 [Authorize]
+[EnableRateLimiting("ReportHeavy")]
 [Route("api/reports")]
 public sealed class ReportsController(
     IReportService reportService,

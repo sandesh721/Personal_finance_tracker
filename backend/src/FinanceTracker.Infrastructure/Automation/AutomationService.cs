@@ -26,6 +26,8 @@ public sealed class AutomationService(
         var usersProcessed = 0;
         var transactionsCreated = 0;
         var autoOccurrencesProcessed = 0;
+        var autoOccurrencesDeferredForRetry = 0;
+        var autoOccurrencesFailedPermanently = 0;
 
         var autoUsers = await dbContext.RecurringTransactionRules
             .AsNoTracking()
@@ -40,23 +42,35 @@ public sealed class AutomationService(
             usersProcessed++;
             transactionsCreated += summary.TransactionsCreated;
             autoOccurrencesProcessed += summary.OccurrencesProcessed;
+            autoOccurrencesDeferredForRetry += summary.OccurrencesDeferredForRetry;
+            autoOccurrencesFailedPermanently += summary.OccurrencesFailedPermanently;
         }
 
         var manualRemindersCreated = await CreateManualRecurringRemindersAsync(normalizedAsOf, cancellationToken);
         var goalRemindersCreated = await CreateGoalRemindersAsync(normalizedAsOf, cancellationToken);
 
-        if (transactionsCreated > 0 || manualRemindersCreated > 0 || goalRemindersCreated > 0)
+        if (transactionsCreated > 0 || manualRemindersCreated > 0 || goalRemindersCreated > 0 || autoOccurrencesDeferredForRetry > 0 || autoOccurrencesFailedPermanently > 0)
         {
             logger.LogInformation(
-                "Automation cycle completed at {ProcessedAtUtc}. Users processed: {UsersProcessed}, transactions created: {TransactionsCreated}, manual reminders: {ManualRemindersCreated}, goal reminders: {GoalRemindersCreated}",
+                "Automation cycle completed at {ProcessedAtUtc}. Users processed: {UsersProcessed}, transactions created: {TransactionsCreated}, retries scheduled: {DeferredForRetry}, permanent recurring failures: {FailedPermanently}, manual reminders: {ManualRemindersCreated}, goal reminders: {GoalRemindersCreated}",
                 DateTime.UtcNow,
                 usersProcessed,
                 transactionsCreated,
+                autoOccurrencesDeferredForRetry,
+                autoOccurrencesFailedPermanently,
                 manualRemindersCreated,
                 goalRemindersCreated);
         }
 
-        return new AutomationRunSummaryDto(usersProcessed, transactionsCreated, autoOccurrencesProcessed, manualRemindersCreated, goalRemindersCreated, DateTime.UtcNow);
+        return new AutomationRunSummaryDto(
+            usersProcessed,
+            transactionsCreated,
+            autoOccurrencesProcessed,
+            autoOccurrencesDeferredForRetry,
+            autoOccurrencesFailedPermanently,
+            manualRemindersCreated,
+            goalRemindersCreated,
+            DateTime.UtcNow);
     }
 
     private async Task<int> CreateManualRecurringRemindersAsync(DateTime asOfUtc, CancellationToken cancellationToken)
@@ -82,7 +96,9 @@ public sealed class AutomationService(
                 ScheduledForDateUtc = scheduledDate,
                 Status = RecurringExecutionStatus.Reminded,
                 ProcessedAtUtc = DateTime.UtcNow,
-                FailureReason = "Manual reminder issued."
+                FailureReason = "Manual reminder issued.",
+                AttemptCount = 1,
+                LastAttemptedUtc = DateTime.UtcNow
             };
 
             dbContext.RecurringTransactionExecutions.Add(execution);

@@ -7,15 +7,18 @@ using FinanceTracker.Application.Transactions.DTOs;
 using FinanceTracker.Application.Transactions.Interfaces;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Enums;
+using FinanceTracker.Infrastructure.Automation;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace FinanceTracker.Infrastructure.Financial;
 
 public sealed class RecurringTransactionService(
     ApplicationDbContext dbContext,
     ITransactionService transactionService,
-    INotificationService notificationService) : IRecurringTransactionService
+    INotificationService notificationService,
+    IOptions<AutomationOptions> automationOptions) : IRecurringTransactionService
 {
     public async Task<IReadOnlyCollection<RecurringTransactionDto>> ListAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -185,6 +188,8 @@ public sealed class RecurringTransactionService(
         var transactionsCreated = 0;
         var occurrencesProcessed = 0;
         var occurrencesSkipped = 0;
+        var occurrencesDeferredForRetry = 0;
+        var occurrencesFailedPermanently = 0;
 
         foreach (var ruleId in rules)
         {
@@ -196,14 +201,23 @@ public sealed class RecurringTransactionService(
                 transactionsCreated += processed.TransactionCreated ? 1 : 0;
                 occurrencesProcessed += processed.OccurrenceProcessed ? 1 : 0;
                 occurrencesSkipped += processed.OccurrenceSkipped ? 1 : 0;
+                occurrencesDeferredForRetry += processed.OccurrenceDeferredForRetry ? 1 : 0;
+                occurrencesFailedPermanently += processed.OccurrenceFailedPermanently ? 1 : 0;
                 keepProcessing = processed.ShouldContinue;
             }
         }
 
-        return new RecurringExecutionSummaryDto(rulesVisited, transactionsCreated, occurrencesProcessed, occurrencesSkipped, DateTime.UtcNow);
+        return new RecurringExecutionSummaryDto(
+            rulesVisited,
+            transactionsCreated,
+            occurrencesProcessed,
+            occurrencesSkipped,
+            occurrencesDeferredForRetry,
+            occurrencesFailedPermanently,
+            DateTime.UtcNow);
     }
 
-    private async Task<(bool ShouldContinue, bool TransactionCreated, bool OccurrenceProcessed, bool OccurrenceSkipped)> ProcessSingleOccurrenceAsync(Guid userId, Guid ruleId, DateTime asOfUtc, CancellationToken cancellationToken)
+    private async Task<(bool ShouldContinue, bool TransactionCreated, bool OccurrenceProcessed, bool OccurrenceSkipped, bool OccurrenceDeferredForRetry, bool OccurrenceFailedPermanently)> ProcessSingleOccurrenceAsync(Guid userId, Guid ruleId, DateTime asOfUtc, CancellationToken cancellationToken)
     {
         var rule = await dbContext.RecurringTransactionRules
             .Include(x => x.Executions)
@@ -211,9 +225,10 @@ public sealed class RecurringTransactionService(
 
         if (rule is null || rule.Status != RecurringRuleStatus.Active || rule.NextRunDateUtc is null || rule.NextRunDateUtc > asOfUtc || !rule.AutoCreateTransaction)
         {
-            return (false, false, false, false);
+            return (false, false, false, false, false, false);
         }
 
+        var options = automationOptions.Value;
         var scheduledDate = RecurringScheduleCalculator.NormalizeDate(rule.NextRunDateUtc.Value);
         var execution = rule.Executions.SingleOrDefault(x => x.ScheduledForDateUtc == scheduledDate);
         if (execution is not null)
@@ -223,22 +238,35 @@ public sealed class RecurringTransactionService(
             {
                 RecurringScheduleCalculator.AdvanceRule(rule, scheduledDate);
                 await dbContext.SaveChangesAsync(cancellationToken);
-                return (rule.NextRunDateUtc is not null && rule.NextRunDateUtc <= asOfUtc, false, true, false);
+                return (rule.NextRunDateUtc is not null && rule.NextRunDateUtc <= asOfUtc, false, true, false, false, false);
             }
 
-            if (execution.Status == RecurringExecutionStatus.Processing && execution.CreatedUtc > DateTime.UtcNow.AddMinutes(-5))
+            if (execution.Status == RecurringExecutionStatus.Failed && execution.AttemptCount >= options.MaxRecurringRetryAttempts)
             {
-                return (false, false, false, true);
+                return (false, false, false, true, false, true);
+            }
+
+            if (execution.NextRetryAfterUtc.HasValue && execution.NextRetryAfterUtc.Value > DateTime.UtcNow)
+            {
+                return (false, false, false, true, true, false);
+            }
+
+            if (execution.Status == RecurringExecutionStatus.Processing && execution.LastAttemptedUtc.HasValue && execution.LastAttemptedUtc.Value > DateTime.UtcNow.AddMinutes(-5))
+            {
+                return (false, false, false, true, false, false);
             }
         }
 
+        var attemptStartedUtc = DateTime.UtcNow;
         if (execution is null)
         {
             execution = new RecurringTransactionExecution
             {
                 RecurringTransactionRuleId = rule.Id,
                 ScheduledForDateUtc = scheduledDate,
-                Status = RecurringExecutionStatus.Processing
+                Status = RecurringExecutionStatus.Processing,
+                AttemptCount = 1,
+                LastAttemptedUtc = attemptStartedUtc
             };
             dbContext.RecurringTransactionExecutions.Add(execution);
             try
@@ -247,13 +275,16 @@ public sealed class RecurringTransactionService(
             }
             catch (DbUpdateException)
             {
-                return (false, false, false, true);
+                return (false, false, false, true, false, false);
             }
         }
         else
         {
             execution.Status = RecurringExecutionStatus.Processing;
+            execution.AttemptCount += 1;
+            execution.LastAttemptedUtc = attemptStartedUtc;
             execution.FailureReason = null;
+            execution.NextRetryAfterUtc = null;
             execution.TransactionId = null;
             execution.ProcessedAtUtc = null;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -277,26 +308,46 @@ public sealed class RecurringTransactionService(
             execution.Status = RecurringExecutionStatus.Completed;
             execution.TransactionId = createdTransaction.Id;
             execution.ProcessedAtUtc = DateTime.UtcNow;
+            execution.FailureReason = null;
+            execution.NextRetryAfterUtc = null;
             RecurringScheduleCalculator.AdvanceRule(rule, scheduledDate);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            return (rule.NextRunDateUtc is not null && rule.NextRunDateUtc <= asOfUtc, true, true, false);
+            return (rule.NextRunDateUtc is not null && rule.NextRunDateUtc <= asOfUtc, true, true, false, false, false);
         }
         catch (ApplicationExceptionBase ex)
         {
+            var failureRecordedUtc = DateTime.UtcNow;
+            var permanentlyFailed = execution.AttemptCount >= options.MaxRecurringRetryAttempts;
             execution.Status = RecurringExecutionStatus.Failed;
             execution.FailureReason = ex.Message.Length > 280 ? ex.Message[..280] : ex.Message;
-            execution.ProcessedAtUtc = DateTime.UtcNow;
+            execution.ProcessedAtUtc = failureRecordedUtc;
+            execution.NextRetryAfterUtc = permanentlyFailed
+                ? null
+                : failureRecordedUtc.Add(ComputeRetryDelay(options, execution.AttemptCount));
             await dbContext.SaveChangesAsync(cancellationToken);
-            await notificationService.PublishAsync(new PublishNotificationRequest(
-                rule.UserId,
-                NotificationType.RecurringExecutionFailed,
-                NotificationLevel.Warning,
-                $"Recurring transaction needs attention: {rule.Title}",
-                $"{rule.Title} could not create its scheduled transaction for {scheduledDate:dd MMM yyyy}. Review the rule and fix the issue: {execution.FailureReason}",
-                "/recurring",
-                $"recurring-failed:{execution.Id}"), cancellationToken);
-            return (false, false, false, true);
+
+            if (execution.AttemptCount == 1 || permanentlyFailed)
+            {
+                var detail = permanentlyFailed
+                    ? $"{rule.Title} could not create its scheduled transaction for {scheduledDate:dd MMM yyyy} after {execution.AttemptCount} attempts. Review the rule and fix the issue: {execution.FailureReason}"
+                    : $"{rule.Title} could not create its scheduled transaction for {scheduledDate:dd MMM yyyy}. It will retry automatically around {execution.NextRetryAfterUtc:dd MMM yyyy HH:mm} UTC. Issue: {execution.FailureReason}";
+
+                await notificationService.PublishAsync(new PublishNotificationRequest(
+                    rule.UserId,
+                    NotificationType.RecurringExecutionFailed,
+                    NotificationLevel.Warning,
+                    permanentlyFailed
+                        ? $"Recurring transaction needs manual attention: {rule.Title}"
+                        : $"Recurring transaction retry scheduled: {rule.Title}",
+                    detail,
+                    "/recurring",
+                    permanentlyFailed
+                        ? $"recurring-failed:{execution.Id}:exhausted"
+                        : $"recurring-failed:{execution.Id}:first"), cancellationToken);
+            }
+
+            return (false, false, false, true, !permanentlyFailed, permanentlyFailed);
         }
     }
 
@@ -329,6 +380,7 @@ public sealed class RecurringTransactionService(
         execution.TransactionId = existingTransaction.Id;
         execution.ProcessedAtUtc = DateTime.UtcNow;
         execution.FailureReason = null;
+        execution.NextRetryAfterUtc = null;
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -409,6 +461,16 @@ public sealed class RecurringTransactionService(
             rule.CreatedUtc,
             rule.UpdatedUtc,
             lastProcessedAtUtc);
+    }
+
+    private static TimeSpan ComputeRetryDelay(AutomationOptions options, int attemptCount)
+    {
+        var baseDelaySeconds = Math.Max(options.InitialRetryDelaySeconds, 15);
+        var maxDelaySeconds = Math.Max(options.MaxRetryDelaySeconds, baseDelaySeconds);
+        var safeExponent = Math.Min(Math.Max(attemptCount - 1, 0), 10);
+        var scaledSeconds = baseDelaySeconds * Math.Pow(2, safeExponent);
+        var boundedSeconds = Math.Min(maxDelaySeconds, scaledSeconds);
+        return TimeSpan.FromSeconds(Math.Max(baseDelaySeconds, boundedSeconds));
     }
 
     private static decimal RoundMoney(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
